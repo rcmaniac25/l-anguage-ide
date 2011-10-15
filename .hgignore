@@ -1,0 +1,9 @@
+#ignore file for Eclipse
+
+# use glob syntax
+syntax: glob
+
+# ignore files
+bin
+obj
+*.suo

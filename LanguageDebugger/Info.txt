@@ -1,0 +1,12 @@
+﻿Created by Vincent Simonetti
+
+Future additions:
+-Variable editing
+-Make sure that "set" variables are setup correctly (macro: x <- x + y; macro call: z <- x + y will have issues because the value set isn't a value being used)
+-Add ability to "continue" execution
+-Add breakpoint support
+-Full shortcut support
+-Debugger highlighting
+-Syntax highlighting
+-Step out debug option
+-The ability to highlight a variable in text and for it to actually read show the value
