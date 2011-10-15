@@ -1,7 +1,6 @@
 ﻿Created by Vincent Simonetti
 
 Future additions:
--Variable editing
 -Make sure that "set" variables are setup correctly (macro: x <- x + y; macro call: z <- x + y will have issues because the value set isn't a value being used)
 -Add ability to "continue" execution
 -Add breakpoint support

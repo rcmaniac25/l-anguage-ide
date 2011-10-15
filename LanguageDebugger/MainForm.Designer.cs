@@ -336,7 +336,7 @@
             this.consoleTabPage.Location = new System.Drawing.Point(4, 22);
             this.consoleTabPage.Name = "consoleTabPage";
             this.consoleTabPage.Padding = new System.Windows.Forms.Padding(3);
-            this.consoleTabPage.Size = new System.Drawing.Size(776, 98);
+            this.consoleTabPage.Size = new System.Drawing.Size(268, 98);
             this.consoleTabPage.TabIndex = 1;
             this.consoleTabPage.Text = "Console";
             this.consoleTabPage.UseVisualStyleBackColor = true;
@@ -347,7 +347,7 @@
             this.consoleOutputList.FormattingEnabled = true;
             this.consoleOutputList.Location = new System.Drawing.Point(3, 3);
             this.consoleOutputList.Name = "consoleOutputList";
-            this.consoleOutputList.Size = new System.Drawing.Size(770, 92);
+            this.consoleOutputList.Size = new System.Drawing.Size(262, 92);
             this.consoleOutputList.TabIndex = 0;
             // 
             // debugTabPage
@@ -442,6 +442,7 @@
             this.Controls.Add(this.splitContainer);
             this.Controls.Add(this.menuStrip1);
             this.MainMenuStrip = this.menuStrip1;
+            this.MinimumSize = new System.Drawing.Size(300, 450);
             this.Name = "MainForm";
             this.Text = "Language Debugger";
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);

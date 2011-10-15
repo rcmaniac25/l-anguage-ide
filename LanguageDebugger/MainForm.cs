@@ -17,6 +17,7 @@ namespace LanguageDebugger
             public Macro macro;
             public int macroLine;
             public int[] opIndexes;
+            public List<int> breakpoints;
 
             public int lastLine;
 
@@ -26,6 +27,8 @@ namespace LanguageDebugger
                 this.macroLine = line;
 
                 this.opIndexes = opIndexes;
+
+                this.breakpoints = new List<int>();
             }
 
             public override string ToString()
@@ -109,7 +112,20 @@ namespace LanguageDebugger
 
         private void variableListBox_DoubleClick(object sender, EventArgs e)
         {
-            //TODO: Open an "edit window to change value"
+            VariableGUI vg = variableListBox.SelectedItem as VariableGUI;
+            if (new VariableEditor(vg.var).ShowDialog() == DialogResult.OK)
+            {
+                //Really bad way of getting the ListBox to redraw but invalidate, update, and invalidate followed by update didn't do anything
+                variableListBox.BeginUpdate();
+
+                int index = variableListBox.Items.IndexOf(vg);
+                variableListBox.Items.Remove(vg);
+                variableListBox.Items.Insert(index, vg);
+
+                variableListBox.SelectedIndex = index;
+
+                variableListBox.EndUpdate();
+            }
         }
 
         private void macroListBox_DoubleClick(object sender, EventArgs e)

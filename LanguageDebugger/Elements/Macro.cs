@@ -245,13 +245,19 @@ namespace LanguageDebugger.Elements
 
         public override void Run(List<Variable> opVars)
         {
+            Run(opVars, 0);
+        }
+
+        //Need to think about this, by starting at a different point we could mess up something
+        internal void Run(List<Variable> opVars, int start)
+        {
             gotoLabel = null;
 
             WrapVars(opVars);
 
             bool isGoto;
             int prevSize = 0;
-            for (int i = 0; i < this.operations.Count; i++)
+            for (int i = start; i < this.operations.Count; i++)
             {
                 if (isGoto = this.operations[i] is GotoOperation)
                 {
