@@ -57,7 +57,6 @@ namespace LanguageDebugger
         private bool saved;
         private bool cancelProcess, exit;
         private int debugLine;
-        private int debugMacro;
 
         public MainForm()
         {
@@ -71,7 +70,6 @@ namespace LanguageDebugger
 
             exit = false;
             debugLine = -1;
-            debugMacro = -1;
             saved = false;
         }
 
@@ -84,24 +82,116 @@ namespace LanguageDebugger
 
         private void codeBox_TextChanged(object sender, EventArgs e)
         {
-            saved = false;
+            if (!startDebuggerToolStripMenuItem.Text.Equals("Continue"))
+            {
+                saved = false;
 
-            int messageCount = consoleOutputList.Items.Count;
-            consoleOutputList.BeginUpdate();
-            try
-            {
-                cancelProcess = true; //Cancel any previous process
-                compileToolStripMenuItem_Click(sender, e); //Could probably run on another thread
+                int messageCount = consoleOutputList.Items.Count;
+                consoleOutputList.BeginUpdate();
+                try
+                {
+                    cancelProcess = true; //Cancel any previous process
+                    compileToolStripMenuItem_Click(sender, e); //Could probably run on another thread
+                }
+                catch
+                {
+                }
+                //Don't add any new console messages
+                while (consoleOutputList.Items.Count > messageCount)
+                {
+                    consoleOutputList.Items.RemoveAt(0);
+                }
+                consoleOutputList.EndUpdate();
             }
-            catch
+        }
+
+        private void codeBox_MouseHover(object sender, EventArgs e)
+        {
+            if (startDebuggerToolStripMenuItem.Text.Equals("Continue"))
             {
+                //We first need to see if we are over a piece of text (perferrably a variable)
+                Point mp = codeBox.PointToClient(MousePosition);
+                int tpos = codeBox.GetCharIndexFromPosition(mp);
+                Point tp = codeBox.GetPositionFromCharIndex(tpos);
+                if (Math.Abs(mp.X - tp.X) <= 10)
+                {
+                    if (Math.Abs(mp.Y - tp.Y) <= 10)
+                    {
+                        //Now get the line
+                        int line = codeBox.GetLineFromCharIndex(tpos);
+                        string sline = codeBox.Lines[line];
+
+                        //Adjust the position to be relitive to the line
+                        tpos -= codeBox.GetFirstCharIndexFromLine(line);
+
+                        string[] messages;
+                        Instruction op = Instruction.GetInstruction(sline, out messages);
+                        if (op != null)
+                        {
+                            string[] args = op.GetArguments();
+
+                            if (args != null && args.Length > 0)
+                            {
+                                //Figure out what variable we are over
+                                int i = 0;
+                                int index = 0;
+                                bool found = false;
+                                if (op.GotoLabel == null)
+                                {
+                                    index = sline.IndexOf(args[i]);
+                                    if (index > tpos)
+                                    {
+                                        //Not found, end
+                                        return;
+                                    }
+                                    else if (tpos >= index && tpos <= (index + args[i].Length))
+                                    {
+                                        found = true;
+                                    }
+                                    else
+                                    {
+                                        i++;
+                                    }
+                                }
+                                if (!found)
+                                {
+                                    for (; i < args.Length; i++)
+                                    {
+                                        index = sline.IndexOf(' ' + args[i], index + 1);
+                                        if (index == -1)
+                                        {
+                                            //Nothing
+                                            break;
+                                        }
+                                        if (index > tpos)
+                                        {
+                                            //Not found, end
+                                            return;
+                                        }
+                                        else if (tpos >= index && tpos <= (index + args[i].Length))
+                                        {
+                                            found = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                //Display the tool tip
+                                if (found)
+                                {
+                                    foreach (VariableGUI gui in variableListBox.Items)
+                                    {
+                                        if (gui.var.Name.Equals(args[i]))
+                                        {
+                                            variableToolTip.Show(gui.var.Value.ToString(), codeBox, tp);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            //Don't add any new console messages
-            while (consoleOutputList.Items.Count > messageCount)
-            {
-                consoleOutputList.Items.RemoveAt(0);
-            }
-            consoleOutputList.EndUpdate();
         }
 
         private void callStackListBox_DoubleClick(object sender, EventArgs e)
@@ -134,7 +224,13 @@ namespace LanguageDebugger
             GotoLine(mac.macroLine);
         }
 
-        private void GotoLine(int line)
+        private void GotoLineAbs(int pos, int len)
+        {
+            codeBox.Select(pos, len);
+            codeBox.Focus();
+        }
+
+        private int GotoLine(int line)
         {
             //Not a very efficient way to do it, but it prevents jumping to the first item in the text
             int pos = 0;
@@ -143,8 +239,25 @@ namespace LanguageDebugger
                 pos += codeBox.Lines[i].Length + 1;
             }
             //Now jump to the line
-            codeBox.Select(pos, 0);
-            codeBox.Focus();
+            GotoLineAbs(pos, 0);
+            return pos;
+        }
+
+        private void HighlighLine(int line, Color col)
+        {
+            int pos = GotoLine(line);
+
+            //Reset the text formatting
+            codeBox.Text = codeBox.Text;
+
+            //Select the whole line
+            GotoLineAbs(pos, codeBox.Lines[line].Length);
+
+            //Set the color
+            codeBox.SelectionBackColor = col;
+
+            //Return to the line position
+            GotoLineAbs(pos, 0);
         }
 
         #endregion
@@ -282,55 +395,64 @@ namespace LanguageDebugger
 
         private void startDebuggerToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (debugToolStripMenuItem.Enabled && startDebuggerToolStripMenuItem.Enabled)
+            if (debugToolStripMenuItem.Enabled)
             {
-                compileToolStripMenuItem_Click(sender, e);
-
-                dataTabs.Controls.Add(debugTabPage);
-                debugTabPage.Focus();
-
-                startDebuggerToolStripMenuItem.Enabled = false;
-                stepIntoToolStripMenuItem.Enabled = true;
-                stepOverToolStripMenuItem.Enabled = true;
-                stopDebuggerToolStripMenuItem.Enabled = true;
-
-                buildToolStripMenuItem.Enabled = false;
-                codeBox.ReadOnly = true;
-
-                MacroGUI main = null;
-                foreach (MacroGUI mg in macros)
+                if (!startDebuggerToolStripMenuItem.Text.Equals("Continue"))
                 {
-                    if (mg.ToString().StartsWith("main", StringComparison.InvariantCultureIgnoreCase))
+                    compileToolStripMenuItem_Click(sender, e);
+
+                    //TODO: How do we figure out if an error occured?
+
+                    dataTabs.Controls.Add(debugTabPage);
+                    debugTabPage.Focus();
+
+                    startDebuggerToolStripMenuItem.Text = "Continue";
+                    stepIntoToolStripMenuItem.Enabled = true;
+                    stepOverToolStripMenuItem.Enabled = true;
+                    stopDebuggerToolStripMenuItem.Enabled = true;
+
+                    buildToolStripMenuItem.Enabled = false;
+                    codeBox.ReadOnly = true;
+
+                    MacroGUI main = null;
+                    foreach (MacroGUI mg in macros)
                     {
-                        main = mg;
-                        debugMacro = macros.IndexOf(mg);
-                        break;
+                        if (mg.ToString().StartsWith("main", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            main = mg;
+                            break;
+                        }
                     }
-                }
 
-                if (main != null)
-                {
-                    ConsoleMessage("");
-                    ConsoleMessage("Starting debugger");
-
-                    //Setup main
-                    debugLine = main.opIndexes.Length > 0 ? main.opIndexes[0] : -1;
-                    callStackListBox.Items.Insert(0, main);
-
-                    if (debugLine != -1)
+                    if (main != null)
                     {
-                        //Make sure we are at the first line
-                        main.lastLine = 0;
-                        GotoLine(debugLine);
+                        ConsoleMessage("");
+                        ConsoleMessage("Starting debugger");
+
+                        //Setup main
+                        debugLine = main.opIndexes.Length > 0 ? main.opIndexes[0] : -1;
+                        callStackListBox.Items.Insert(0, main);
+
+                        if (debugLine != -1)
+                        {
+                            //Make sure we are at the first line
+                            main.lastLine = 0;
+                            HighlighLine(debugLine, Color.Red);
+                        }
+                    }
+                    else
+                    {
+                        stopDebuggerToolStripMenuItem_Click(sender, e);
                     }
                 }
                 else
                 {
-                    stopDebuggerToolStripMenuItem_Click(sender, e);
+                    //TODO: Continue
                 }
             }
         }
 
+        //This is really just a glorified, and manual version of Macro.Run
         private void debugStepping(object sender, EventArgs e, bool stepInto)
         {
             //Create the variable list
@@ -358,8 +480,17 @@ namespace LanguageDebugger
 
                     //Go to parent macro
                     MacroGUI mac = callStackListBox.Items[0] as MacroGUI;
-                    debugMacro = macros.IndexOf(mac);
-                    GotoLine(debugLine = mac.opIndexes[mac.lastLine++]);
+                    if (mac.lastLine + 1 >= mac.opIndexes.Length)
+                    {
+                        //Just go to the next line
+                        debugLine = mac.opIndexes[mac.lastLine++] + 1;
+                    }
+                    else
+                    {
+                        //We have another line we can go to
+                        debugLine = mac.opIndexes[++mac.lastLine];
+                    }
+                    HighlighLine(debugLine, Color.Red);
                     if (mac.lastLine >= mac.opIndexes.Length)
                     {
                         debugLine = -1;
@@ -369,10 +500,10 @@ namespace LanguageDebugger
             else
             {
                 MacroGUI mac = callStackListBox.Items[0] as MacroGUI;
-                Operation[] ops = mac.macro.GetOperations();
+                Instruction[] ops = mac.macro.GetInstructions();
 
                 //We always want to be on the current debug line when we run
-                GotoLine(debugLine);
+                HighlighLine(debugLine, Color.Red);
 
                 //Invoke
                 if (ops[mac.lastLine] is Macro && stepInto)
@@ -382,7 +513,7 @@ namespace LanguageDebugger
                     Macro macro = ops[mac.lastLine] as Macro;
 
                     //Find the MacroGUI
-                    debugMacro = -1;
+                    int debugMacro = -1;
                     for (int i = 0; i < macros.Count; i++)
                     {
                         if (macros[i].macro.Equals(macro))
@@ -400,7 +531,7 @@ namespace LanguageDebugger
                     mac = macros[debugMacro];
                     callStackListBox.Items.Insert(0, mac);
                     mac.lastLine = 0;
-                    GotoLine(debugLine = mac.opIndexes[mac.lastLine]);
+                    HighlighLine(debugLine = mac.opIndexes[mac.lastLine], Color.Red);
 
                     //Wrap variables
                     mac.macro.WrapVars(opVars);
@@ -411,13 +542,15 @@ namespace LanguageDebugger
                     bool isGoto, increment = true;
                     int prevSize = 0;
 
-                    if (isGoto = ops[mac.lastLine] is Operation.GotoOperation)
+                    if (isGoto = ops[mac.lastLine] is Instruction.GotoInstruction)
                     {
                         prevSize = opVars.Count;
                     }
 
-                    //Invoke the operation
+                    //Invoke the instruction
                     ops[mac.lastLine].Run(opVars);
+                    //TODO: Figure out how to handle break points within a macro
+
                     //Handle any gotos
                     if (isGoto && prevSize != opVars.Count)
                     {
@@ -426,6 +559,7 @@ namespace LanguageDebugger
                         increment = false;
                         if (jump == -1)
                         {
+                            //We know how to cleanup a goto, we can ignore it
                             opVars.Remove(Variable.FindVar(gotoLabel, opVars));
                             debugLine = -1;
                             stepOverToolStripMenuItem_Click(sender, e); //It does exactly what we want, so why copy and paste?
@@ -434,7 +568,7 @@ namespace LanguageDebugger
                         {
                             prevSize = mac.lastLine;
                             mac.lastLine = jump;
-                            GotoLine(debugLine = mac.opIndexes[mac.lastLine]);
+                            HighlighLine(debugLine = mac.opIndexes[mac.lastLine], Color.Red);
                         }
                     }
                     else
@@ -448,11 +582,11 @@ namespace LanguageDebugger
                         if (mac.lastLine >= mac.opIndexes.Length)
                         {
                             debugLine = -1;
-                            GotoLine(mac.opIndexes[mac.opIndexes.Length - 1] + 1); //Jump to the end of the macro
+                            HighlighLine(mac.opIndexes[mac.opIndexes.Length - 1] + 1, Color.Red); //Jump to the end of the macro
                         }
                         else
                         {
-                            GotoLine(debugLine = mac.opIndexes[mac.lastLine]);
+                            HighlighLine(debugLine = mac.opIndexes[mac.lastLine], Color.Red);
                         }
                     }
                     ops[prevSize].Cleanup(opVars);
@@ -473,7 +607,6 @@ namespace LanguageDebugger
             variableListBox.EndUpdate();
         }
 
-        //These is really just a glorified, and manual version of Macro.Run
         private void stepIntoToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (debugToolStripMenuItem.Enabled && stepIntoToolStripMenuItem.Enabled)
@@ -498,19 +631,40 @@ namespace LanguageDebugger
 
                 dataTabs.Controls.Remove(debugTabPage);
 
-                startDebuggerToolStripMenuItem.Enabled = true;
                 stepIntoToolStripMenuItem.Enabled = false;
                 stepOverToolStripMenuItem.Enabled = false;
                 stopDebuggerToolStripMenuItem.Enabled = false;
 
                 buildToolStripMenuItem.Enabled = true;
-                codeBox.ReadOnly = false;
+
+                //Reset the text formatting
+                codeBox.Text = codeBox.Text;
+
+                if (debugLine >= 0)
+                {
+                    GotoLine(debugLine);
+                }
+                else
+                {
+                    //Find main
+                    foreach (MacroGUI mac in this.macros)
+                    {
+                        if (mac.macro.ToString().Equals("main", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            GotoLine(mac.opIndexes[mac.opIndexes.Length - 1] + 1);
+                            break;
+                        }
+                    }
+                }
 
                 debugLine = -1;
-                debugMacro = -1;
 
                 variableListBox.Items.Clear();
                 callStackListBox.Items.Clear();
+
+                //Do this last to prevent "you need to save"
+                startDebuggerToolStripMenuItem.Text = "Start Debugger";
+                codeBox.ReadOnly = false;
             }
         }
 
@@ -541,12 +695,26 @@ namespace LanguageDebugger
 
                 for (int i = 0; i < codeBox.Lines.Length && !cancelProcess; i++)
                 {
-                    Operation op = Operation.GetOperation(codeBox.Lines[i], out messages);
+                    Instruction op = Instruction.GetInstruction(codeBox.Lines[i], out messages);
                     if (op != null && onMacro)
                     {
-                        //Got the operation
+                        //Got the instruction
                         opLines.Add(i);
-                        mac.AddOperation(op);
+                        string label;
+                        if ((label = mac.AddInstruction(op)) != null)
+                        {
+                            label = string.Format("Goto label already exists: {0}", label);
+                            if (messages != null && messages.Length > 0)
+                            {
+                                List<string> m = new List<string>(messages);
+                                m.Add(label);
+                                messages = m.ToArray();
+                            }
+                            else
+                            {
+                                messages = new string[] { label };
+                            }
+                        }
                     }
                     else if (!string.IsNullOrWhiteSpace(codeBox.Lines[i]))
                     {

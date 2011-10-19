@@ -5,12 +5,12 @@ using System.Text;
 
 namespace LanguageDebugger.Elements
 {
-    public class Macro : Operation
+    public class Macro : Instruction
     {
         private static List<Macro> macros = new List<Macro>();
 
         //Macro variables
-        private List<Operation> operations;
+        private List<Instruction> instructions;
         private bool globalSave;
         private object[] format;
         private bool setVar;
@@ -24,7 +24,7 @@ namespace LanguageDebugger.Elements
 
         private Macro(Macro mac)
         {
-            this.operations = mac.operations;
+            this.instructions = mac.instructions;
             this.globalSave = mac.globalSave;
             this.format = mac.format;
             this.setVar = mac.setVar;
@@ -38,7 +38,7 @@ namespace LanguageDebugger.Elements
 
         public Macro(string format)
         {
-            this.operations = new List<Operation>();
+            this.instructions = new List<Instruction>();
 
             int argC = 0;
             StringBuilder bu = new StringBuilder(format.Trim());
@@ -94,20 +94,46 @@ namespace LanguageDebugger.Elements
             }
         }
 
-        public Macro(string format, IEnumerable<Operation> ops)
+        public Macro(string format, IEnumerable<Instruction> ops)
             : this(format)
         {
-            this.operations.AddRange(ops);
+            List<string> labels = new List<string>();
+            foreach (Instruction i in ops)
+            {
+                if (i.GotoLabel != null)
+                {
+                    if (labels.Contains(i.GotoLabel))
+                    {
+                        throw new ArgumentException(string.Format("Duplicate goto labels: {0}", i.GotoLabel));
+                    }
+                    labels.Add(i.GotoLabel);
+                }
+            }
+            this.instructions.AddRange(ops);
         }
 
-        public void AddOperation(Operation op)
+        public string AddInstruction(Instruction op)
         {
-            this.operations.Add(op);
+            List<string> labels = new List<string>();
+            foreach (Instruction i in this.instructions)
+            {
+                if (i.GotoLabel != null && i.GotoLabel.Equals(op.GotoLabel))
+                {
+                    return i.GotoLabel;
+                }
+            }
+            this.instructions.Add(op);
+            return null;
         }
 
-        public Operation[] GetOperations()
+        public Instruction[] GetInstructions()
         {
-            return operations.ToArray();
+            return instructions.ToArray();
+        }
+
+        public override string[] GetArguments()
+        {
+            return this.args;
         }
 
         public string GlobalCommit()
@@ -116,8 +142,27 @@ namespace LanguageDebugger.Elements
             {
                 if (FindMacro(this.ToString()) == null)
                 {
-                    macros.Add(this);
-                    globalSave = true;
+                    //We don't want macros that could override instructions
+                    string[] msg;
+                    if (Instruction.GetInstruction(this.ToString(), out msg) == null)
+                    {
+                        macros.Add(this);
+                        globalSave = true;
+                    }
+                    else
+                    {
+                        string msgs = string.Empty;
+                        if (msg != null && msg.Length > 0)
+                        {
+                            StringBuilder bu = new StringBuilder();
+                            foreach (string s in msg)
+                            {
+                                bu.AppendFormat("{0} ", s);
+                            }
+                            msgs = bu.ToString();
+                        }
+                        return string.Format("Macro has same name as instruction: \"{0}\".{1}", this, msgs);
+                    }
                 }
                 else
                 {
@@ -138,17 +183,58 @@ namespace LanguageDebugger.Elements
             {
                 if (m.MatchFormat(line))
                 {
+                    if (m.setVar)
+                    {
+                        //We need to check to see what set-variable is used
+                        int index = -1;
+                        for (int i = 1; i < m.format.Length; i++)
+                        {
+                            if (m.format[i] is Variable)
+                            {
+                                if (((Variable)m.format[i]).Name.Equals(((Variable)m.format[0]).Name))
+                                {
+                                    index = i;
+                                    break;
+                                }
+                            }
+                        }
+                        //We only want to process variables that exist already within arguments (otherwise the macro could create the argument)
+                        if (index >= 0)
+                        {
+                            //Using the macro's format (since we had to compare to it to see if it is the same macro), create a macro format for the passed in "line"
+                            object[] format = BreakFormat(line, m.format);
+                            bool continueSearch = false;
+                            //Do the same loop as before and compare indexes
+                            for (int i = 1; i < format.Length; i++)
+                            {
+                                if (format[i] is Variable)
+                                {
+                                    if (((Variable)format[i]).Name.Equals(((Variable)format[0]).Name))
+                                    {
+                                        //Continue looking, if not the same match
+                                        continueSearch = index != i;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (continueSearch)
+                            {
+                                continue;
+                            }
+                        }
+                    }
                     return new Macro(m);
                 }
             }
             return null;
         }
 
-        public bool MatchFormat(string line)
+        private bool MatchFormat(string line)
         {
             StringBuilder bu = new StringBuilder(line);
             int index = 0;
             int tI = 0;
+            string rem = null;
             while (bu.Length > 0)
             {
                 if (format[index] is Variable)
@@ -163,6 +249,7 @@ namespace LanguageDebugger.Elements
                     }
                     else
                     {
+                        rem = bu.ToString();
                         bu.Clear();
                     }
                     continue;
@@ -173,7 +260,41 @@ namespace LanguageDebugger.Elements
                 }
                 bu.Remove(0, (format[index - 1] as string).Length);
             }
-            return index == format.Length;
+            return index == format.Length && (rem == null || rem.IndexOf(' ') == -1);
+        }
+
+        private static object[] BreakFormat(string line, object[] baseFormat)
+        {
+            object[] format = new object[baseFormat.Length];
+
+            StringBuilder bu = new StringBuilder(line);
+            int index = 0;
+            int tI = 0;
+            while (bu.Length > 0)
+            {
+                string part;
+                if (baseFormat[index] is Variable)
+                {
+                    if (++index != baseFormat.Length)
+                    {
+                        part = bu.ToString();
+                        tI = part.IndexOf(baseFormat[index] as string);
+                        format[index - 1] = new Variable(part.Substring(0, tI));
+                        bu.Remove(0, tI);
+                    }
+                    else
+                    {
+                        format[index - 1] = new Variable(bu.ToString());
+                        bu.Clear();
+                    }
+                    continue;
+                }
+                part = bu.ToString();
+                tI = part.IndexOf(baseFormat[index++] as string);
+                format[index - 1] = part.Substring(0, (baseFormat[index - 1] as string).Length);
+                bu.Remove(0, (baseFormat[index - 1] as string).Length);
+            }
+            return format;
         }
 
         protected override void Parse(string[] components)
@@ -245,25 +366,19 @@ namespace LanguageDebugger.Elements
 
         public override void Run(List<Variable> opVars)
         {
-            Run(opVars, 0);
-        }
-
-        //Need to think about this, by starting at a different point we could mess up something
-        internal void Run(List<Variable> opVars, int start)
-        {
             gotoLabel = null;
 
             WrapVars(opVars);
 
             bool isGoto;
             int prevSize = 0;
-            for (int i = start; i < this.operations.Count; i++)
+            for (int i = 0; i < this.instructions.Count; i++)
             {
-                if (isGoto = this.operations[i] is GotoOperation)
+                if (isGoto = this.instructions[i] is GotoInstruction)
                 {
                     prevSize = opVars.Count;
                 }
-                this.operations[i].Run(opVars);
+                this.instructions[i].Run(opVars);
                 if (isGoto && prevSize != opVars.Count)
                 {
                     string gl = opVars[opVars.Count - 1].Name;
@@ -281,7 +396,7 @@ namespace LanguageDebugger.Elements
                 {
                     prevSize = i;
                 }
-                this.operations[prevSize].Cleanup(opVars);
+                this.instructions[prevSize].Cleanup(opVars);
             }
         }
 
@@ -329,11 +444,11 @@ namespace LanguageDebugger.Elements
 
         internal int JumpIndex(string name)
         {
-            for (int i = 0; i < this.operations.Count; i++)
+            for (int i = 0; i < this.instructions.Count; i++)
             {
-                if (!string.IsNullOrWhiteSpace(this.operations[i].GotoLabel))
+                if (!string.IsNullOrWhiteSpace(this.instructions[i].GotoLabel))
                 {
-                    if (this.operations[i].GotoLabel.Equals(name))
+                    if (this.instructions[i].GotoLabel.Equals(name))
                     {
                         return i;
                     }
@@ -351,11 +466,11 @@ namespace LanguageDebugger.Elements
                 {
                     if (m.format.Length == this.format.Length)
                     {
-                        if (m.operations.Count == this.operations.Count)
+                        if (m.instructions.Count == this.instructions.Count)
                         {
                             if (m.format.SequenceEqual(this.format))
                             {
-                                return m.operations.SequenceEqual(this.operations);
+                                return m.instructions.SequenceEqual(this.instructions);
                             }
                         }
                     }

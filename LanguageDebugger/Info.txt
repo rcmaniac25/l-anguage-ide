@@ -1,11 +1,17 @@
 ﻿Created by Vincent Simonetti
 
 Future additions:
--Make sure that "set" variables are setup correctly (macro: x <- x + y; macro call: z <- x + y will have issues because the value set isn't a value being used)
 -Add ability to "continue" execution
+--debugStepping needs to be modified so that it executes every statement, this will allow for breakpoints to be used. If the instruction is a Macro then it needs to be checked for breakpoints (redundent search), if none exist then it can execute. Else it needs to be processed at each line, probably with an additional function that will simply run but go "into" each function.
 -Add breakpoint support
--Full shortcut support
--Debugger highlighting
 -Syntax highlighting
 -Step out debug option
+--This would basically do the same as "continuing" execution but would stop once it returned to it's parent call (or exited)
 -The ability to highlight a variable in text and for it to actually read show the value
+--Doesn't work consistantly
+-Implement initial states (program arguments)
+-Figure out how to pring out messages while typing (not just when compiled)
+-Figure out how to prevent debugging if errors occur
+-Figure out how to distinguish between errors and warnings
+-Figure out how to keep scroll position when debug marker will be within bounds of the window
+-Figure out how to implement a line number component so it scales when the text scales)

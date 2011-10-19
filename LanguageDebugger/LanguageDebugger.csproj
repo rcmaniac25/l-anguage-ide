@@ -47,7 +47,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Elements\Macro.cs" />
-    <Compile Include="Elements\Operation.cs" />
+    <Compile Include="Elements\Instruction.cs" />
     <Compile Include="Elements\Variable.cs" />
     <Compile Include="Elements\WrappedVariable.cs" />
     <Compile Include="MainForm.cs">

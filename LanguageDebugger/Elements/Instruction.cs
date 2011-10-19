@@ -5,9 +5,11 @@ using System.Text;
 
 namespace LanguageDebugger.Elements
 {
-    public abstract class Operation
+    public abstract class Instruction
     {
         public abstract void Run(List<Variable> opVars);
+
+        public abstract string[] GetArguments();
 
         protected virtual void Parse(string[] components)
         {
@@ -19,12 +21,12 @@ namespace LanguageDebugger.Elements
 
         public string GotoLabel { get; internal set; }
 
-        public static Operation GetOperation(string line, out string[] messages)
+        public static Instruction GetInstruction(string line, out string[] messages)
         {
             List<string> mes = new List<string>();
             if (!string.IsNullOrWhiteSpace(line))
             {
-                Operation op = null;
+                Instruction op = null;
                 string gotoTxt = null;
 
                 line = line.Trim();
@@ -36,16 +38,16 @@ namespace LanguageDebugger.Elements
                     gotoTxt = line.Substring(0, line.IndexOf(']'));
                     line = line.Substring(gotoTxt.Length + 1).Trim();
                 }
-                //Find the operation
+                //Find the instruction
                 if (line.StartsWith("goto "))
                 {
                     if (line.Substring(5).IndexOf(' ') == -1)
                     {
-                        op = new GotoDirectOperation();
+                        op = new GotoDirectInstruction();
                     }
                     else
                     {
-                        mes.Add("Not valid GOTO 'x' operation");
+                        mes.Add("Not valid GOTO 'x' instruction");
                     }
                 }
                 else if (line.IndexOf(" <- ") > 0)
@@ -53,16 +55,24 @@ namespace LanguageDebugger.Elements
                     string strLine = line.Substring(line.IndexOf(" <- ") + 4);
                     if (strLine.EndsWith("-1"))
                     {
-                        op = new SubOneOperation();
+                        op = new SubOneInstruction();
                     }
                     else if (strLine.EndsWith("+1"))
                     {
-                        op = new AddOneOperation();
+                        op = new AddOneInstruction();
+                    }
+                    else if (strLine.IndexOf(' ') == -1)
+                    {
+                        //Could be a do nothing instruction
+                        if (line.StartsWith(strLine + ' '))
+                        {
+                            op = new DoNothingInstruction();
+                        }
                     }
                 }
                 else if (line.StartsWith("if", StringComparison.InvariantCultureIgnoreCase) && line.IndexOf(" != 0 GOTO ", StringComparison.InvariantCultureIgnoreCase) > 0)
                 {
-                    op = new GotoOperation();
+                    op = new GotoInstruction();
                 }
                 if (op == null)
                 {
@@ -73,10 +83,24 @@ namespace LanguageDebugger.Elements
                 {
                     op.GotoLabel = gotoTxt;
                     op.Parse(line.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
+
+                    if (op is GotoInstruction && ((GotoInstruction)op).gotoLabel.Equals(op.GotoLabel))
+                    {
+                        //Infinite loop possible ([a] ... goto a)
+                        if (op is GotoDirectInstruction)
+                        {
+                            mes.Add(string.Format("Infinite loop occurance \"{0}\"", op));
+                            op = null;
+                        }
+                        else
+                        {
+                            mes.Add(string.Format("Infinite loop possible \"{0}\"", op));
+                        }
+                    }
                 }
                 else
                 {
-                    mes.Add(string.Format("Unknown command \"{0}\". Remember, operations are case and \"space\" sensitive.", line));
+                    mes.Add(string.Format("Unknown command \"{0}\". Remember, instructions are case, \"space\", and \"argument order\" sensitive.", line));
                 }
 
                 messages = mes.ToArray();
@@ -96,7 +120,7 @@ namespace LanguageDebugger.Elements
             return GotoLabel == null ? string.Empty : string.Format("[{0}] ", GotoLabel);
         }
 
-        private class AddOneOperation : Operation
+        private class AddOneInstruction : Instruction
         {
             private string argName;
 
@@ -117,6 +141,11 @@ namespace LanguageDebugger.Elements
                 }
             }
 
+            public override string[] GetArguments()
+            {
+                return new string[] { argName };
+            }
+
             protected override void Parse(string[] components)
             {
                 if (components.Length != 4)
@@ -132,7 +161,7 @@ namespace LanguageDebugger.Elements
             }
         }
 
-        private class SubOneOperation : Operation
+        private class SubOneInstruction : Instruction
         {
             private string argName;
 
@@ -144,6 +173,11 @@ namespace LanguageDebugger.Elements
                     throw new ArgumentOutOfRangeException();
                 }
                 var.Value--;
+            }
+
+            public override string[] GetArguments()
+            {
+                return new string[] { argName };
             }
 
             protected override void Parse(string[] components)
@@ -161,9 +195,42 @@ namespace LanguageDebugger.Elements
             }
         }
 
-        internal class GotoOperation : Operation
+        private class DoNothingInstruction : Instruction
         {
-            protected string gotoLabel;
+            private string argName;
+
+            public override void Run(List<Variable> opVars)
+            {
+                Variable var = Variable.FindVar(argName, opVars);
+                if (var == null)
+                {
+                    opVars.Add(new Variable(argName));
+                }
+            }
+
+            public override string[] GetArguments()
+            {
+                return new string[] { argName };
+            }
+
+            protected override void Parse(string[] components)
+            {
+                if (components.Length != 3)
+                {
+                    throw new ArgumentException();
+                }
+                argName = components[2];
+            }
+
+            public override string ToString()
+            {
+                return string.Format("{0}{1} <- {1}", base.ToString(), argName);
+            }
+        }
+
+        internal class GotoInstruction : Instruction
+        {
+            protected internal string gotoLabel;
             private string argName;
 
             //Do some fancy, under-the-hood work to do goto
@@ -186,6 +253,11 @@ namespace LanguageDebugger.Elements
                 gotoLabel = components[5];
             }
 
+            public override string[] GetArguments()
+            {
+                return new string[] { argName };
+            }
+
             public override void Cleanup(List<Variable> opVars)
             {
                 opVars.Remove(Variable.FindVar(gotoLabel, opVars));
@@ -197,8 +269,8 @@ namespace LanguageDebugger.Elements
             }
         }
 
-        //Not a "standard" operation, but a necessery one because it is a goto
-        internal class GotoDirectOperation : GotoOperation
+        //Not a "standard" instruction, but a necessery one because it is a goto
+        internal class GotoDirectInstruction : GotoInstruction
         {
             /* Quivilant of:
              * **goto 'x'

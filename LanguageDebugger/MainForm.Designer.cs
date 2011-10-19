@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             this.menuStrip1 = new System.Windows.Forms.MenuStrip();
             this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.newToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -63,6 +64,7 @@
             this.callStackListBox = new System.Windows.Forms.ListBox();
             this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
             this.saveFileDialog1 = new System.Windows.Forms.SaveFileDialog();
+            this.variableToolTip = new System.Windows.Forms.ToolTip(this.components);
             this.menuStrip1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).BeginInit();
             this.splitContainer.Panel1.SuspendLayout();
@@ -295,6 +297,7 @@
             this.codeBox.Text = "";
             this.codeBox.WordWrap = false;
             this.codeBox.TextChanged += new System.EventHandler(this.codeBox_TextChanged);
+            this.codeBox.MouseHover += new System.EventHandler(this.codeBox_MouseHover);
             // 
             // macroLabel
             // 
@@ -336,7 +339,7 @@
             this.consoleTabPage.Location = new System.Drawing.Point(4, 22);
             this.consoleTabPage.Name = "consoleTabPage";
             this.consoleTabPage.Padding = new System.Windows.Forms.Padding(3);
-            this.consoleTabPage.Size = new System.Drawing.Size(268, 98);
+            this.consoleTabPage.Size = new System.Drawing.Size(776, 98);
             this.consoleTabPage.TabIndex = 1;
             this.consoleTabPage.Text = "Console";
             this.consoleTabPage.UseVisualStyleBackColor = true;
@@ -347,7 +350,7 @@
             this.consoleOutputList.FormattingEnabled = true;
             this.consoleOutputList.Location = new System.Drawing.Point(3, 3);
             this.consoleOutputList.Name = "consoleOutputList";
-            this.consoleOutputList.Size = new System.Drawing.Size(262, 92);
+            this.consoleOutputList.Size = new System.Drawing.Size(770, 92);
             this.consoleOutputList.TabIndex = 0;
             // 
             // debugTabPage
@@ -444,7 +447,7 @@
             this.MainMenuStrip = this.menuStrip1;
             this.MinimumSize = new System.Drawing.Size(300, 450);
             this.Name = "MainForm";
-            this.Text = "Language Debugger";
+            this.Text = "L(anguage) Debugger";
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
             this.menuStrip1.ResumeLayout(false);
             this.menuStrip1.PerformLayout();
@@ -508,6 +511,7 @@
         private System.Windows.Forms.Label macroLabel;
         private System.Windows.Forms.Label variableLabel;
         private System.Windows.Forms.Label callStackLabel;
+        private System.Windows.Forms.ToolTip variableToolTip;
     }
 }
 

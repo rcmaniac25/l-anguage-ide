@@ -19,6 +19,20 @@ x <- x +1
 goto c
 **
 
+**%x% <- %x% + %y%
+[a] if y != 0 goto b
+goto c
+[b] x <- x +1
+y <- y -1
+z <- z +1
+if y != 0 goto a
+[c] if z != 0 goto d
+goto e
+[d] z <- z -1
+y <- y +1
+goto c
+**
+
 **%y% <- %x%
 [a] if x != 0 goto b
 goto c
@@ -36,6 +50,7 @@ goto c
 **main
 x <- x +1
 y <- y +1
+x <- x + y
 x <- x + y
 x <-0
 **
