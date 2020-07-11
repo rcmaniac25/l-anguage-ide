@@ -1,0 +1,7 @@
+#ignore file for Eclipse
+
+# ignore files
+.hg
+bin
+obj
+*.suo
